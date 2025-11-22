@@ -1,106 +1,112 @@
 import json
 import math
 from colorama import Fore, init
-
-g = 9.81
-
-
-def load_data(filename):
-    with open(filename, "r", encoding="utf-8") as f:
-        return json.load(f)
+import matplotlib.pyplot as plt
 
 
-def f(x1, x2, v1, v2, k):
-    v = math.sqrt(v1**2 + v2**2)
-    return (
-        v1,
-        v2,
-        -k * v * v1,
-        -k * v  * v2 - g
-    )
+DATA_FILE = "data.json"
 
 
-def rk4_step(x1, x2, v1, v2, h, k):
-    k1 = f(x1, x2, v1, v2, k)
-
-    k2 = f(
-        x1 + 0.5 * h * k1[0],
-        x2 + 0.5 * h * k1[1],
-        v1 + 0.5 * h * k1[2],
-        v2 + 0.5 * h * k1[3],
-        k
-    )
-
-    k3 = f(
-        x1 + 0.5 * h * k2[0],
-        x2 + 0.5 * h * k2[1],
-        v1 + 0.5 * h * k2[2],
-        v2 + 0.5 * h * k2[3],
-        k
-    )
-
-    k4 = f(
-        x1 + h * k3[0],
-        x2 + h * k3[1],
-        v1 + h * k3[2],
-        v2 + h * k3[3],
-        k
-    )
-
-    x1_new = x1 + h/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0])
-    x2_new = x2 + h/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1])
-    v1_new = v1 + h/6*(k1[2] + 2*k2[2] + 2*k3[2] + k4[2])
-    v2_new = v2 + h/6*(k1[3] + 2*k2[3] + 2*k3[3] + k4[3])
-
-    return x1_new, x2_new, v1_new, v2_new
+def load_data():
+    with open(DATA_FILE, "r", encoding="utf-8-sig") as data_file:
+        data = json.load(data_file)
+    return data
 
 
-def solve(k, data, title):
-    print(Fore.GREEN + f"\nРешение методом Рунге–Кутты: {title}")
+def f(x, y):
+    return x * math.exp(-x**2) - 2 * x * y
 
-    h = 1
-    t_max = 150
 
-    # Начальные условия
-    x1 = 0
-    x2 = 0
-    v0 = data["v_0"]
-    alpha = math.radians(data["alpha"])
+def y_analytic(x):
+    return math.exp(-x**2) * (1 + x**2 / 2)
 
-    v1 = v0 * math.cos(alpha)
-    v2 = v0 * math.sin(alpha)
 
-    T, X1, X2 = [], [], []
+def euler_solve(data):
+    a = data["begin"]
+    b = data["end"]
+    h = data["h"]
+    y0 = data["y0"]
 
-    for t in range(t_max + 1):
-        T.append(t)
-        X1.append(x1)
-        X2.append(x2)
+    x = a
+    n_steps = int((b - a) / h)
 
-        x1, x2, v1, v2 = rk4_step(x1, x2, v1, v2, h, k)
+    result = [(x, y0)]
 
-    for i in range(0, len(T), 10):
-        print(f"t={T[i]:3d}   x1={X1[i]:10.2f}   x2={X2[i]:10.2f}")
-    return T, X1, X2
+    for _ in range(n_steps):
+        y0 = y0 + h * f(x, y0)
+        x = x + h
+        result.append((x, y0))
+
+    return result
+
+
+def runge_kutta_solve(data):
+    a = data["begin"]
+    b = data["end"]
+    h = data["h"]
+    y0 = data["y0"]
+
+    x = a
+    n_steps = int((b - a) / h)
+
+    result = [(x, y0)]
+
+    for _ in range(n_steps):
+        k1 = h * f(x, y0)
+        k2 = h * f(x + h/2, y0 + k1/2)
+        k3 = h * f(x + h/2, y0 + k2/2)
+        k4 = h * f(x + h, y0 + k3)
+
+        y0 = y0 + (k1 + 2*k2 + 2*k3 + k4) / 6
+        x = x + h
+
+        result.append((x, y0))
+
+    return result
+
+
+def graphic_maker(points, name):
+    x, y = zip(*points)
+
+    plt.plot(x, y, label=name)
+    plt.xlabel("Значения x")
+    plt.ylabel("Значения y")
+    plt.grid(True)
+    plt.legend()
 
 
 def main():
-    data = load_data("data.json")
+    data = load_data()
+    print(f"{Fore.LIGHTBLUE_EX}Исходные данные\n\n{Fore.WHITE}Отрезок: [{data['begin']}, {data['end']}]\nh: {data['h']}\ny0: {data['y0']}")
 
-    ro = data["ro"]
-    c = data["c"]
-    ro_chugun = data["ro_chugun"]
-    d = data["d"]
+    print(f"\n\n{Fore.GREEN}Метод Эйлера")
+    euler_result = euler_solve(data)
+    print(euler_result)
 
-    S = math.pi * d**2 / 4
-    V = math.pi * d**3 / 6
-    m = ro_chugun * V
+    print(f"\n\n{Fore.GREEN}Метод Рунге-Кутта 4 порядка")
+    runge_kutta_result = runge_kutta_solve(data)
+    print(runge_kutta_result)
 
-    k_b = c * ro * S / (2 * m)
+    print(f"\n\n{Fore.GREEN}Аналитическое значение y(x)")
+    y_b = y_analytic(data['end'])
+    analytic_result = [(x, y_analytic(x)) for x, _ in euler_result]
+    print(f"y(b) = y({data['end']}) = {y_b:.4f}")
 
-    solve(k=0, data=data, title="(a) k = 0")
+    euler_error = abs(euler_result[-1][-1] - y_b)
+    runge_kutta_error = abs(runge_kutta_result[-1][-1] - y_b)
 
-    solve(k=k_b, data=data, title=f"(б) k = {k_b:.6e}")
+    print(f"\n\n{Fore.GREEN}Погрешности\n")
+    print(f"Погрешность метода Эйлера: {Fore.LIGHTRED_EX}{euler_error:.4f}")
+    print(f"Погрешность метода Рунге-Кутта: {Fore.LIGHTRED_EX}{runge_kutta_error:.6f}")
+
+    print(f"\n\n{Fore.GREEN}Графики\n")
+
+    plt.figure("Графики")
+    graphic_maker(analytic_result, "График аналитической функции f(x)")
+    graphic_maker(euler_result, "График приближенных значений по методу Эйлера")
+    graphic_maker(runge_kutta_result, "График приближенных значений по методу Рунге-Кутта")
+    plt.title("Графики")
+    plt.show()
 
 
 if __name__ == "__main__":
